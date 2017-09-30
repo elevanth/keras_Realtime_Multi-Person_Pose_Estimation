@@ -1,6 +1,7 @@
 model/**/*.caffemodel
 model/**/*.h5
 model/**/*.npy
+model/*.h5
 dataset/train2017
 dataset/val2017
 dataset/test2017
@@ -9,6 +10,6 @@ dataset/valmask2017
 dataset/*.h5
 dataset/annotations
 dataset/coco
+results/*
 .idea
-__pycache__
-.ipynb_checkpoints
+__pycache__.ipynb_checkpoints

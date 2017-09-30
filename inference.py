@@ -29,7 +29,7 @@ colors = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0]
           [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]]
 
 
-def process (input_image, params, model_params):
+def process (model, input_image, params, model_params):
 
     oriImg = cv2.imread(input_image)  # B,G,R order
     multiplier = [x * model_params['boxsize'] / oriImg.shape[0] for x in params['scale_search']]
@@ -91,6 +91,8 @@ def process (input_image, params, model_params):
         all_peaks.append(peaks_with_score_and_id)
         peak_counter += len(peaks)
 
+    # print(all_peaks)
+
     connection_all = []
     special_k = []
     mid_num = 10
@@ -143,6 +145,8 @@ def process (input_image, params, model_params):
         else:
             special_k.append(k)
             connection_all.append([])
+
+    # print(connection_all)
 
     # last number in each row is the total parts number of that person
     # the second last number in each row is the score of the overall configuration
@@ -199,31 +203,33 @@ def process (input_image, params, model_params):
             deleteIdx.append(i)
     subset = np.delete(subset, deleteIdx, axis=0)
 
-    canvas = cv2.imread(input_image)  # B,G,R order
-    for i in range(18):
-        for j in range(len(all_peaks[i])):
-            cv2.circle(canvas, all_peaks[i][j][0:2], 4, colors[i], thickness=-1)
+    # print(subset)
 
-    stickwidth = 4
+    # canvas = cv2.imread(input_image)  # B,G,R order
+    # for i in range(18):
+    #     for j in range(len(all_peaks[i])):
+    #         cv2.circle(canvas, all_peaks[i][j][0:2], 4, colors[i], thickness=-1)
+    #
+    # stickwidth = 4
+    #
+    # for i in range(17):
+    #     for n in range(len(subset)):
+    #         index = subset[n][np.array(limbSeq[i]) - 1]
+    #         if -1 in index:
+    #             continue
+    #         cur_canvas = canvas.copy()
+    #         Y = candidate[index.astype(int), 0]
+    #         X = candidate[index.astype(int), 1]
+    #         mX = np.mean(X)
+    #         mY = np.mean(Y)
+    #         length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
+    #         angle = math.degrees(math.atan2(X[0] - X[1], Y[0] - Y[1]))
+    #         polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0,
+    #                                    360, 1)
+    #         cv2.fillConvexPoly(cur_canvas, polygon, colors[i])
+    #         canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
 
-    for i in range(17):
-        for n in range(len(subset)):
-            index = subset[n][np.array(limbSeq[i]) - 1]
-            if -1 in index:
-                continue
-            cur_canvas = canvas.copy()
-            Y = candidate[index.astype(int), 0]
-            X = candidate[index.astype(int), 1]
-            mX = np.mean(X)
-            mY = np.mean(Y)
-            length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
-            angle = math.degrees(math.atan2(X[0] - X[1], Y[0] - Y[1]))
-            polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0,
-                                       360, 1)
-            cv2.fillConvexPoly(cur_canvas, polygon, colors[i])
-            canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
-
-    return canvas
+    return all_peaks
 
 if __name__ == '__main__':
     # parser = argparse.ArgumentParser()
@@ -248,12 +254,17 @@ if __name__ == '__main__':
     params, model_params = config_reader()
 
     # generate image with body parts
-    canvas = process(input_image, params, model_params)
+    # canvas = process(input_image, params, model_params)
+    all_peaks = process(input_image, params, model_params)
+    print(len(all_peaks), len(all_peaks[4]))
+    print(all_peaks)
+    # print(len(subset), len(subset[4]))
+    # print(subset)
 
     toc = time.time()
     print ('processing time is %.5f' % (toc - tic))
 
-    cv2.imwrite(output, canvas)
+    # cv2.imwrite(output, canvas)
 
 
 
