@@ -10,6 +10,9 @@ dataset/valmask2017
 dataset/*.h5
 dataset/annotations
 dataset/coco
+sample_images/*
 results/*
+test/*
+test.py
 .idea
 __pycache__.ipynb_checkpoints

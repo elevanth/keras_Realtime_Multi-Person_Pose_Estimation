@@ -28,13 +28,18 @@ colors = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0]
           [85, 0, 255], \
           [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]]
 
+eps = 1e-3
 
 def process (model, input_image, params, model_params):
 
+    # oriImg.shape = (height, width, depth)
     oriImg = cv2.imread(input_image)  # B,G,R order
+    # print('oriImg', oriImg.shape)
     multiplier = [x * model_params['boxsize'] / oriImg.shape[0] for x in params['scale_search']]
 
+    # joints heatmap
     heatmap_avg = np.zeros((oriImg.shape[0], oriImg.shape[1], 19))
+    # Part Affinity Fields
     paf_avg = np.zeros((oriImg.shape[0], oriImg.shape[1], 38))
 
     for m in range(len(multiplier)):
@@ -42,16 +47,21 @@ def process (model, input_image, params, model_params):
 
         imageToTest = cv2.resize(oriImg, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         imageToTest_padded, pad = util.padRightDownCorner(imageToTest, model_params['stride'],
-                                                          model_params['padValue'])
-
-        input_img = np.transpose(np.float32(imageToTest_padded[:,:,:,np.newaxis]), (3,0,1,2))/256 - 0.5; # required shape (1, width, height, channels)
+                                                 model_params['padValue'])
+        # required shape (1, width, height, channels)
+        input_img = np.transpose(np.float32(imageToTest_padded[:,:,:,np.newaxis]), (3,0,1,2))/256 - 0.5
+        # print('input_img', input_img.shape)
 
         output_blobs = model.predict(input_img)
+        # print('output_blobs', output_blobs[1].shape)
 
-        # extract outputs, resize, and remove padding
+        ### extract outputs, resize, and remove padding, make heatmap as origin size
+        # make shape [1, heigth, width, depth] to [heigth, width, depth]
         heatmap = np.squeeze(output_blobs[1])  # output 1 is heatmaps
+        # return to input_img size of this epoch
         heatmap = cv2.resize(heatmap, (0, 0), fx=model_params['stride'], fy=model_params['stride'],
                              interpolation=cv2.INTER_CUBIC)
+        # print('heatmap', heatmap.shape)
         heatmap = heatmap[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3],
                   :]
         heatmap = cv2.resize(heatmap, (oriImg.shape[1], oriImg.shape[0]), interpolation=cv2.INTER_CUBIC)
@@ -72,6 +82,7 @@ def process (model, input_image, params, model_params):
         map_ori = heatmap_avg[:, :, part]
         map = gaussian_filter(map_ori, sigma=3)
 
+        ### find each of the heat point of the map
         map_left = np.zeros(map.shape)
         map_left[1:, :] = map[:-1, :]
         map_right = np.zeros(map.shape)
@@ -83,8 +94,11 @@ def process (model, input_image, params, model_params):
 
         peaks_binary = np.logical_and.reduce(
             (map >= map_left, map >= map_right, map >= map_up, map >= map_down, map > params['thre1']))
+        # get the locate of the heat points in the numpy array
         peaks = list(zip(np.nonzero(peaks_binary)[1], np.nonzero(peaks_binary)[0]))  # note reverse
+        # [(x, y, score)]
         peaks_with_score = [x + (map_ori[x[1], x[0]],) for x in peaks]
+        # [(x, y, score, id)]
         id = range(peak_counter, peak_counter + len(peaks))
         peaks_with_score_and_id = [peaks_with_score[i] + (id[i],) for i in range(len(id))]
 
@@ -93,6 +107,7 @@ def process (model, input_image, params, model_params):
 
     # print(all_peaks)
 
+    # list all the connection between all joints
     connection_all = []
     special_k = []
     mid_num = 10
@@ -108,10 +123,12 @@ def process (model, input_image, params, model_params):
             connection_candidate = []
             for i in range(nA):
                 for j in range(nB):
+                    # unit vector
                     vec = np.subtract(candB[j][:2], candA[i][:2])
                     norm = math.sqrt(vec[0] * vec[0] + vec[1] * vec[1])
                     vec = np.divide(vec, norm)
 
+                    # generate Arithmetic sequence from start to end like [1,2,3,4,5]
                     startend = list(zip(np.linspace(candA[i][0], candB[j][0], num=mid_num), \
                                    np.linspace(candA[i][1], candB[j][1], num=mid_num)))
 
@@ -122,18 +139,22 @@ def process (model, input_image, params, model_params):
                         [score_mid[int(round(startend[I][1])), int(round(startend[I][0])), 1] \
                          for I in range(len(startend))])
 
+                    # ???
                     score_midpts = np.multiply(vec_x, vec[0]) + np.multiply(vec_y, vec[1])
                     score_with_dist_prior = sum(score_midpts) / len(score_midpts) + min(
-                        0.5 * oriImg.shape[0] / norm - 1, 0)
-                    criterion1 = len(np.nonzero(score_midpts > params['thre2'])[0]) > 0.8 * len(
-                        score_midpts)
+                        0.5 * oriImg.shape[0] / (norm + eps) - 1, 0)
+
+                    # 80% of the score_midpts should be larger than thre2
+                    criterion1 = len(np.nonzero(score_midpts > params['thre2'])[0]) > 0.8 * len(score_midpts)
                     criterion2 = score_with_dist_prior > 0
                     if criterion1 and criterion2:
                         connection_candidate.append([i, j, score_with_dist_prior,
                                                      score_with_dist_prior + candA[i][2] + candB[j][2]])
 
+            # sort the candidates from large to small according the score_with_dist_prior
             connection_candidate = sorted(connection_candidate, key=lambda x: x[2], reverse=True)
             connection = np.zeros((0, 5))
+            # choose the max probability of every joint connection and every joint can be used only once
             for c in range(len(connection_candidate)):
                 i, j, s = connection_candidate[c][0:3]
                 if (i not in connection[:, 3] and j not in connection[:, 4]):
@@ -151,6 +172,7 @@ def process (model, input_image, params, model_params):
     # last number in each row is the total parts number of that person
     # the second last number in each row is the score of the overall configuration
     subset = -1 * np.ones((0, 20))
+    # list all_peaks as numpy array
     candidate = np.array([item for sublist in all_peaks for item in sublist])
 
     for k in range(len(mapIdx)):
@@ -197,13 +219,13 @@ def process (model, input_image, params, model_params):
                     subset = np.vstack([subset, row])
 
     # delete some rows of subset which has few parts occur
-    deleteIdx = [];
+    deleteIdx = []
     for i in range(len(subset)):
         if subset[i][-1] < 4 or subset[i][-2] / subset[i][-1] < 0.4:
             deleteIdx.append(i)
     subset = np.delete(subset, deleteIdx, axis=0)
-
     # print(subset)
+    canvas = []
 
     # canvas = cv2.imread(input_image)  # B,G,R order
     # for i in range(18):
@@ -229,7 +251,7 @@ def process (model, input_image, params, model_params):
     #         cv2.fillConvexPoly(cur_canvas, polygon, colors[i])
     #         canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
 
-    return all_peaks
+    return all_peaks, subset, canvas
 
 if __name__ == '__main__':
     # parser = argparse.ArgumentParser()
@@ -255,7 +277,8 @@ if __name__ == '__main__':
 
     # generate image with body parts
     # canvas = process(input_image, params, model_params)
-    all_peaks = process(input_image, params, model_params)
+
+    all_peaks = process(model, input_image, params, model_params)
     print(len(all_peaks), len(all_peaks[4]))
     print(all_peaks)
     # print(len(subset), len(subset[4]))
