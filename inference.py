@@ -227,29 +227,29 @@ def process (model, input_image, params, model_params):
     # print(subset)
     canvas = []
 
-    # canvas = cv2.imread(input_image)  # B,G,R order
-    # for i in range(18):
-    #     for j in range(len(all_peaks[i])):
-    #         cv2.circle(canvas, all_peaks[i][j][0:2], 4, colors[i], thickness=-1)
-    #
-    # stickwidth = 4
-    #
-    # for i in range(17):
-    #     for n in range(len(subset)):
-    #         index = subset[n][np.array(limbSeq[i]) - 1]
-    #         if -1 in index:
-    #             continue
-    #         cur_canvas = canvas.copy()
-    #         Y = candidate[index.astype(int), 0]
-    #         X = candidate[index.astype(int), 1]
-    #         mX = np.mean(X)
-    #         mY = np.mean(Y)
-    #         length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
-    #         angle = math.degrees(math.atan2(X[0] - X[1], Y[0] - Y[1]))
-    #         polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0,
-    #                                    360, 1)
-    #         cv2.fillConvexPoly(cur_canvas, polygon, colors[i])
-    #         canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
+    canvas = cv2.imread(input_image)  # B,G,R order
+    for i in range(18):
+        for j in range(len(all_peaks[i])):
+            cv2.circle(canvas, all_peaks[i][j][0:2], 4, colors[i], thickness=-1)
+
+    stickwidth = 4
+
+    for i in range(17):
+        for n in range(len(subset)):
+            index = subset[n][np.array(limbSeq[i]) - 1]
+            if -1 in index:
+                continue
+            cur_canvas = canvas.copy()
+            Y = candidate[index.astype(int), 0]
+            X = candidate[index.astype(int), 1]
+            mX = np.mean(X)
+            mY = np.mean(Y)
+            length = ((X[0] - X[1]) ** 2 + (Y[0] - Y[1]) ** 2) ** 0.5
+            angle = math.degrees(math.atan2(X[0] - X[1], Y[0] - Y[1]))
+            polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0,
+                                       360, 1)
+            cv2.fillConvexPoly(cur_canvas, polygon, colors[i])
+            canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
 
     return all_peaks, subset, canvas
 
@@ -262,8 +262,8 @@ if __name__ == '__main__':
     # input_image = args.image
     # output = args.output
 
-    input_image = './sample_images/ski.jpg'
-    output = './results/result.jpg'
+    input_image = './sample_images/vv.jpg'
+    output = './results/test_result.jpg'
 
     tic = time.time()
     print('start processing...')
@@ -276,18 +276,16 @@ if __name__ == '__main__':
     params, model_params = config_reader()
 
     # generate image with body parts
-    # canvas = process(input_image, params, model_params)
-
-    all_peaks = process(model, input_image, params, model_params)
-    print(len(all_peaks), len(all_peaks[4]))
-    print(all_peaks)
+    all_peaks, subset, canvas = process(model, input_image, params, model_params)
+    # print(len(all_peaks), len(all_peaks[4]))
+    # print(all_peaks)
     # print(len(subset), len(subset[4]))
     # print(subset)
 
     toc = time.time()
     print ('processing time is %.5f' % (toc - tic))
 
-    # cv2.imwrite(output, canvas)
+    cv2.imwrite(output, canvas)
 
 
 
